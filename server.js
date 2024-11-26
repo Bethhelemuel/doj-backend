@@ -1,6 +1,7 @@
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 const liquidatorRoutes = require('./routes/liquidatorRoutes');
+const trackingRoutes = require('./routes/trackingRoutes');
 require('dotenv').config();
 const cors = require('cors');
 
@@ -10,6 +11,7 @@ app.use(cors());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/liquidator', liquidatorRoutes);
+app.use('/api/tracking', trackingRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

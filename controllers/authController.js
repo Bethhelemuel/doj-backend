@@ -111,6 +111,7 @@ exports.registerUser = async (req, res) => {
                      VALUES (?, ?, ?, ?, ?, false)`;
 
         db.query(sql, [firstName, lastName, email, hashedPassword, role], (err, result) => {
+            console.log(err)
             if (err) return res.status(500).json({ error: 'Database error' });
 
             const userId = result.insertId;
