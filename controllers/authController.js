@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
+const crypto = require('crypto');
 
 // Helper function to send OTP
 const sendOTP = (email, otp, type, userInfo = {}) => {
@@ -65,7 +66,24 @@ const sendOTP = (email, otp, type, userInfo = {}) => {
             subject: 'Your Account Approval Status',
             text: `Dear ${userInfo.requesterName},\n\nUnfortunately, your account approval request was declined by the admin.\n\nFor further details, please contact support.\n\nBest regards,\nYour Application Team`
         };
+    } else if (type === 'Password Reset') {
+        mailOptions = {
+            from: 'sizwelutshete@gmail.com',
+            to: email,
+            subject: 'Password Reset Request',
+            html: `
+                <p>Dear ${userInfo.requesterName},</p>
+                <p>You have requested to reset your password. Click the link below to set a new password:</p>
+                <p><a href="${userInfo.resetLink}" target="_blank" style="color: blue; font-weight: bold;">Reset Password</a></p>
+                <p>This link is valid for 15 minutes.</p>
+                <p>If you did not request this, please ignore this email.</p>
+                <br/>
+                <p>Best regards,</p>
+                <p>Your Application Team</p>
+            `
+        };
     }
+    
 
     return transporter.sendMail(mailOptions)
         .then(info => {
@@ -286,7 +304,7 @@ exports.loginUser = (req, res) => {
 };
 
 
-exports.requestPasswordReset = (req, res) => {
+/* exports.requestPasswordReset = (req, res) => {
     const { email } = req.body;
 
     const getUserSql = 'SELECT id FROM users WHERE email = ?';
@@ -311,7 +329,7 @@ exports.requestPasswordReset = (req, res) => {
         });
     });
 };
-
+ */
 
 
 // Approve User API
@@ -356,6 +374,96 @@ exports.declineUser = async (req, res) => {
         res.json({ message: 'User decline notification sent' });
     });
 };
+
+
+
+
+
+exports.requestPasswordReset = (req, res) => {
+    const { email } = req.body;
+    console.log(email)
+    // Check if user exists
+    const getUserSql = 'SELECT id, firstName FROM users WHERE email = ?';
+    db.query(getUserSql, [email], (err, userResult) => {
+        if (err || userResult.length === 0) return res.status(400).json({ error: 'User not found' });
+
+        const userId = userResult[0].id;
+        const firstName = userResult[0].firstName;
+
+        // Generate a password reset token (secure random token)
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        // Store reset token in the database
+        const insertTokenSql = `INSERT INTO password_resets (userId, resetToken, expiresAt) 
+                                VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE))`;
+        db.query(insertTokenSql, [userId, resetToken], async (tokenErr) => {
+            if (tokenErr) return res.status(500).json({ error: 'Failed to generate reset token' });
+
+            // Construct the password reset link
+            const resetLink = `http://localhost:4200/reset-password?token=${resetToken}`;
+
+            // Send email to user with reset link
+            try {
+                await sendOTP(email, null, 'Password Reset', { resetLink, requesterName: firstName });
+                res.json({ message: 'Password reset link sent to your email.' });
+            } catch (emailErr) {
+                res.status(500).json({ error: 'Failed to send email' });
+            }
+        });
+    });
+};
+
+exports.resetPassword = async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    // Check if the token exists and is valid
+    const getTokenSql = 'SELECT userId FROM password_resets WHERE resetToken = ? AND expiresAt > NOW()';
+    db.query(getTokenSql, [token], async (err, tokenResult) => {
+        if (err || tokenResult.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        const userId = tokenResult[0].userId;
+
+        // Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        // Update password in the users table
+        const updatePasswordSql = 'UPDATE users SET password = ? WHERE id = ?';
+        db.query(updatePasswordSql, [hashedPassword, userId], (updateErr) => {
+            if (updateErr) return res.status(500).json({ error: 'Failed to update password' });
+
+            // Delete the reset token from the database
+            const deleteTokenSql = 'DELETE FROM password_resets WHERE userId = ?';
+            db.query(deleteTokenSql, [userId], () => {
+                res.json({ message: 'Password successfully reset. You can now log in.' });
+            });
+        });
+    });
+};
+
+exports.verifyResetToken = (req, res) => {
+    const { token } = req.body;
+
+    if (!token) {
+        return res.status(400).json({ error: 'Token is required' });
+    }
+
+    const getTokenSql = 'SELECT userId FROM password_resets WHERE resetToken = ? AND expiresAt > NOW()';
+    db.query(getTokenSql, [token], (err, tokenResult) => {
+        if (err || tokenResult.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        res.json({ message: 'Token is valid', userId: tokenResult[0].userId });
+    });
+};
+
+
+
+
+
 
 
 

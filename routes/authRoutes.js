@@ -3,10 +3,12 @@ const {
   registerUser,
   verifyOTP,
   loginUser,
-  resendOTP,
-  requestPasswordReset,
+  resendOTP,  
   approveUser,
   declineUser,
+  requestPasswordReset,
+  resetPassword,
+  verifyResetToken
 } = require("../controllers/authController");
 const router = express.Router();
 
@@ -17,5 +19,8 @@ router.post("/resend-otp", resendOTP);
 router.post("/password-reset", requestPasswordReset); // Optional
 router.get("/approve-user", approveUser);
 router.get("/decline-user", declineUser);
+router.post('/forgot-password', requestPasswordReset);
+router.post('/reset-password', resetPassword);
+router.post('/verify-reset-token', verifyResetToken);
 
 module.exports = router;
